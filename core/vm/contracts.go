@@ -145,6 +145,7 @@ type StatefulArgs struct {
 	Height  *big.Int
 	From    common.Address
 	To      *common.Address
+	EVM     *EVM
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
