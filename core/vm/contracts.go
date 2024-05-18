@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/bn256"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/holiman/uint256"
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -164,11 +165,10 @@ func ActivePrecompiles(rules params.Rules) []common.Address {
 }
 
 type StatefulArgs struct {
-	StateDB StateDB
-	Height  *big.Int
-	From    common.Address
-	To      *common.Address
-	EVM     *EVM
+	From  common.Address
+	To    *common.Address
+	Value *uint256.Int
+	EVM   *EVM
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
