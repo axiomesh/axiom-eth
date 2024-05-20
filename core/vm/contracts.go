@@ -164,11 +164,17 @@ func ActivePrecompiles(rules params.Rules) []common.Address {
 	}
 }
 
+type StatefulArgsOutput struct {
+	GasCost *uint64
+}
+
 type StatefulArgs struct {
 	From  common.Address
 	To    *common.Address
 	Value *uint256.Int
 	EVM   *EVM
+
+	Output *StatefulArgsOutput
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
@@ -181,8 +187,15 @@ func RunPrecompiledContract(p PrecompiledContract, input []byte, suppliedGas uin
 	if suppliedGas < gasCost {
 		return nil, 0, ErrOutOfGas
 	}
-	suppliedGas -= gasCost
+	args.Output = &StatefulArgsOutput{}
 	output, err := p.Run(input, args)
+	if args.Output.GasCost != nil {
+		gasCost = *args.Output.GasCost
+		if suppliedGas < gasCost {
+			return nil, 0, ErrOutOfGas
+		}
+	}
+	suppliedGas -= gasCost
 	return output, suppliedGas, err
 }
 
