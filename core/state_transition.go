@@ -37,6 +37,7 @@ type ExecutionResult struct {
 	RefundedGas uint64 // Total gas refunded after execution
 	Err         error  // Any error encountered during the execution(listed in core/vm/errors.go)
 	ReturnData  []byte // Returned data from evm(function result or data supplied with revert opcode)
+	FeeTipped   *big.Int
 }
 
 // Unwrap returns the internal evm error which allows us for further
@@ -183,6 +184,13 @@ func ApplyMessage(evm *vm.EVM, msg *Message, gp *GasPool) (*ExecutionResult, err
 	return NewStateTransition(evm, msg, gp).TransitionDb()
 }
 
+func ApplyMessageNoFeeBurnOrTip(evm *vm.EVM, msg Message, gp *GasPool) (*ExecutionResult, error) {
+	st := NewStateTransition(evm, &msg, gp)
+	st.noFeeBurnAndTip = true
+
+	return st.TransitionDb()
+}
+
 // StateTransition represents a state transition.
 //
 // == The State Transitioning Model
@@ -212,6 +220,11 @@ type StateTransition struct {
 	initialGas   uint64
 	state        vm.StateDB
 	evm          *vm.EVM
+
+	// If true, fee burning and tipping won't happen during transition. Instead, their values will be included in the
+	// ExecutionResult, which caller can use the values to update the balance of burner and coinbase account.
+	// This is useful during parallel state transition, where the common account read/write should be minimized.
+	noFeeBurnAndTip bool
 }
 
 // NewStateTransition initialises and returns a new state transition object.
@@ -449,14 +462,18 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}
 	effectiveTipU256, _ := uint256.FromBig(effectiveTip)
 
+	fee := new(uint256.Int)
+
 	if st.evm.Config.NoBaseFee && msg.GasFeeCap.Sign() == 0 && msg.GasTipCap.Sign() == 0 {
 		// Skip fee payment when NoBaseFee is set and the fee fields
 		// are 0. This avoids a negative effectiveTip being applied to
 		// the coinbase when simulating calls.
 	} else {
-		fee := new(uint256.Int).SetUint64(st.gasUsed())
+		fee := fee.SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTipU256)
-		st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		if !st.noFeeBurnAndTip {
+			st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		}
 	}
 
 	return &ExecutionResult{
@@ -464,6 +481,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		RefundedGas: gasRefund,
 		Err:         vmerr,
 		ReturnData:  ret,
+		FeeTipped:   fee.ToBig(),
 	}, nil
 }
 
